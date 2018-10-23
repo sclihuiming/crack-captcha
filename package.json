@@ -1,0 +1,13 @@
+{
+  "name": "crack-cpatcha",
+  "version": "0.0.1",
+  "private": false,
+  "scripts": {
+    "start": "node index"
+  },
+  "dependencies": {
+    "jimp": "^0.5.4",
+    "lodash": "^4.17.11",
+    "puppeteer": "^1.8.0"
+  }
+}
