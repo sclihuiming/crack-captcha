@@ -1,25 +1,39 @@
-import * as jimp from 'jimp';
-import * as _ from 'lodash';
+const  jimp = require('jimp');
+const _  = require('lodash');
 
 
 class utils {
-
   constructor(page) {
     this.page = page;
-    this.btn_position = {};
+    //滑块相对于窗口的位置
+    this.btn_position = {
+      btn_left: 0,
+      btn_top: 0
+    };
+    this.resize = {
+      full_width: 312,
+      full_height: 183,
+      icon_width: 62,
+      icon_height: 62
+    },
+      this.similarPixDis = 2; //计算相似的像素空间距离
+    this.diffPixDis = 8;// 计算落差的像素空间距离
+    this.nums = 10;// 相似的点的个数
+    this.iconToBackgroundDisX = 34;//icon初始相对于北京的距离
   }
+
 
   /**
    * 计算需要移动的距离
    * @param image 图片对象 jimp实例化
-   * @param pointx  图片的x坐标
-   * @param pointy  图片的y坐标
-   * @param firstPixDis 计算差异化很大的空间像素标准值
-   * @param secondPixDis 计算差异化很小的空间像素标准值
-   * @param times 相似次数
+   * @param startX  图片的x坐标
+   * @param startY  图片的y坐标
+   * @param diffPixDis 计算差异化很大的空间像素标准值
+   * @param similarPixDis 计算差异化很小的空间像素标准值
+   * @param nums 相似次数
    * @returns {*}
    */
-  _calMoveX(image, pointx, pointy, firstPixDis, secondPixDis, times) {
+  _calMoveX(image, startX, startY, diffPixDis = this.diffPixDis, similarPixDis= this.similarPixDis, nums = this.nums) {
     let frontR = 0, frontG = 0, frontB = 0;
     let index = 0;
 
@@ -28,12 +42,15 @@ class utils {
 
     let same = false;
     let info = [];//可能的坐标点集合
+    let pointInfo = {};
 
     //311是背景图片的大小   10是随意写的偏移值,(主要是缺块一般都是在右边)
     //todo 可以抽象为静态变量
-    image.scan(pointx, pointy, 311 - pointx - 10, 62, function (x, y, idx) {
+
+    image.scan(startX, startY, this.resize.full_width - startX - 5, this.resize.icon_height, function (x, y, idx) {
       let fullBitMap = this.bitmap.data;
 
+      //对比当前点和上一个点的像素距离
       if (index > 2) {
         const res1 = Math.abs(fullBitMap[idx] - frontR);
         const res2 = Math.abs(fullBitMap[idx + 1] - frontG);
@@ -43,7 +60,7 @@ class utils {
         // console.log(dis)
         if (!same) {
           //100是因为缺块一般都在右边,也可以直接去掉这个判断
-          if (dis > firstPixDis && x > 100) {
+          if (dis > diffPixDis && x > 100) {
             same = true;
             sameX = x;
             // console.log(dis, x, y)
@@ -54,17 +71,21 @@ class utils {
           }
         } else {
           //相似值判断
-          if (dis <= secondPixDis) {
+          if (dis <= similarPixDis) {
             // console.log(x, dis)
             sameNum++;
-            if (sameNum > times) {
+            if (sameNum > nums) {
               info.push(sameX);
-              same = false;
-              sameNum = 0;
-              sameX = 0;
+              pointInfo[sameX] = pointInfo[sameX] || 1;
+              pointInfo[sameX]++;
+              // same = false;
+              // sameNum = 0;
+              // sameX = 0;
             }
           } else {
             same = false;
+            sameNum = 0;
+            sameX = 0;
           }
         }
       }
@@ -74,6 +95,8 @@ class utils {
       index++;
     });
 
+    // console.log(info)
+
     if (_.size(info) > 0) {
       info = _.sortBy(_.uniq(info));
       //验证info中的坐标
@@ -81,7 +104,7 @@ class utils {
       console.log('before', info)
       for (let i = length - 1; i >= 0; i--) {
         if ((i - 1) >= 0) {
-          if (info[i] - info[i - 1] < 30) {//取最优
+          if (info[i] - info[i - 1] < 20) {//取最优
             info[i] = null;
           }
         }
@@ -90,8 +113,8 @@ class utils {
       info = _.compact(info);
       return info[info.length - 1];
     } else {
-      secondPixDis += 0.1;
-      return this._calMoveX(image, pointx, pointy, firstPixDis, secondPixDis, times);
+      similarPixDis += 0.1;
+      return this._calMoveX(image, startX, startY, diffPixDis, similarPixDis, nums);
     }
   }
 
@@ -152,14 +175,22 @@ class utils {
     await this.page.mouse.up();
     await this._sleep(_.random(2500, 3500));
 
-
+    //这里全部返回false,可以一直测试跑
     return { isSuccess: false };
   }
 
 
-  async _drag(image, pointx, pointy, firstPixDis, secondPixDis, times) {
-    let distance = this._calMoveX(image, pointx, pointy, firstPixDis, secondPixDis, times);
-    distance = distance - 34;
+  /**
+   * 拖动
+   * @param {*} image  jimp图片
+   * @param {*} startX 图片检测开始坐标
+   * @param {*} startY  图片检测结束坐标
+   */
+  async _drag(image, startX, startY) {
+    let distance = this._calMoveX(image, startX, startY);
+
+    //distance代表的是缺口的横坐标点
+    distance = distance - this.iconToBackgroundDisX;
     const result = await this._tryValidation(distance);
     console.log(result)
     if (result.isSuccess) {
@@ -179,6 +210,7 @@ class utils {
     console.log('1111')
     await this._sleep(1000);
     console.log(3333)
+    // 这里的根据页面的元素不同而改变, 只要能取到背景大图的url
     const url = await this.page.$eval('#slideBg', i => i.src);
     const iconUrl = await this.page.$eval('#slideBlock', i => i.src);
     //icon相对于背景的高度
@@ -186,31 +218,29 @@ class utils {
     console.log(url)
     console.log(iconUrl)
 
-    let full = await jimp.read(url);
+    let fullImg = await jimp.read(url);
     let icon = await jimp.read(iconUrl);
-    full = await full.resize(312, 183);
-    icon = await icon.resize(62, 62);
-    await full.writeAsync('full.png')
-    await icon.writeAsync('icon.png')
-    //judge
-    let loop = Math.floor(312 / 62);
-    let res = '';
+    fullImg = await fullImg.resize(this.resize.full_width, this.resize.full_height);
+    icon = await icon.resize(this.resize.icon_width, this.resize.icon_height);
+    // await fullImg.writeAsync('full.png')
+    // await icon.writeAsync('icon.png')
 
     //judge diff
     this.btn_position = await this._getBtnPosition();
 
     console.log(this.btn_position)
 
-    //62是icon的大小
-    let x = 311 - (loop - 1) * 62;
-    let y = top - 1;
-    let firstPixDis = 8;//默认像素空间距离
-    let secondPixDis = 2;
-    res = await this._drag(full, x, y, firstPixDis, secondPixDis, 10);
+    //judge 大概计算一下大图是的宽是小图宽的多少倍
+    let loop = Math.floor(this.resize.full_width / this.resize.icon_width);
+    //62是icon的大小 一般缺口都是在右边,所以这里下面的可以视实际情况调整
+    let startX = this.resize.full_width - (loop - 1) * this.resize.icon_width; //背景图的横轴开始像素点
+    let startY = top - 1; //背景图的竖轴开始像素点
+
+    let res = await this._drag(fullImg, startX, startY);
     console.log(res);
   }
 
 }
 
 
-export { utils };
+module.exports = { utils };
