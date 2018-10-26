@@ -41,6 +41,6 @@ async function action() {
   }
 }
 
-module.exports = { action}
+module.exports = { action }
 
 

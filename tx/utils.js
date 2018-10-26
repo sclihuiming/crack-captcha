@@ -36,20 +36,22 @@ class utils {
   _calMoveX(image, startX, startY, diffPixDis = this.diffPixDis, similarPixDis= this.similarPixDis, nums = this.nums) {
     let frontR = 0, frontG = 0, frontB = 0;
     let index = 0;
-
     let sameNum = 0;//相似次数
     let sameX = 0;//最终点
-
     let same = false;
     let info = [];//可能的坐标点集合
     let pointInfo = {};
+    let tempWhite = [];
 
     //311是背景图片的大小   10是随意写的偏移值,(主要是缺块一般都是在右边)
     //todo 可以抽象为静态变量
-
+    image.convolute([[-1, -1,-1], [-1, 8, -1], [-1, -1, -1]]); //图像卷积计算   Laplace因子
     image.scan(startX, startY, this.resize.full_width - startX - 5, this.resize.icon_height, function (x, y, idx) {
       let fullBitMap = this.bitmap.data;
 
+      if(fullBitMap[idx]===255&&fullBitMap[idx+1]===255&&fullBitMap[idx+2]===255){
+        tempWhite.push([x,y])
+      }
       //对比当前点和上一个点的像素距离
       if (index > 2) {
         const res1 = Math.abs(fullBitMap[idx] - frontR);
@@ -78,9 +80,6 @@ class utils {
               info.push(sameX);
               pointInfo[sameX] = pointInfo[sameX] || 1;
               pointInfo[sameX]++;
-              // same = false;
-              // sameNum = 0;
-              // sameX = 0;
             }
           } else {
             same = false;
@@ -110,6 +109,7 @@ class utils {
         }
       }
       console.log('after', info)
+      console.log('new ', tempWhite)
       info = _.compact(info);
       return info[info.length - 1];
     } else {
