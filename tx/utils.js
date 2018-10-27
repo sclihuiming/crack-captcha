@@ -1,5 +1,5 @@
-const  jimp = require('jimp');
-const _  = require('lodash');
+const jimp = require('jimp');
+const _ = require('lodash');
 
 
 class utils {
@@ -28,93 +28,131 @@ class utils {
    * @param image 图片对象 jimp实例化
    * @param startX  图片的x坐标
    * @param startY  图片的y坐标
+   * @param way  走哪种取数据方式    
    * @param diffPixDis 计算差异化很大的空间像素标准值
    * @param similarPixDis 计算差异化很小的空间像素标准值
    * @param nums 相似次数
+   * @param sameWay 同一种运算方式的次数 
+   * @param whiteToneMin 边框值可接受的最小值
    * @returns {*}
    */
-  _calMoveX(image, startX, startY, diffPixDis = this.diffPixDis, similarPixDis= this.similarPixDis, nums = this.nums) {
-    let frontR = 0, frontG = 0, frontB = 0;
-    let index = 0;
-    let sameNum = 0;//相似次数
-    let sameX = 0;//最终点
-    let same = false;
-    let info = [];//可能的坐标点集合
-    let pointInfo = {};
-    let tempWhite = [];
+  async _calMoveX(image, startX, startY, way = 1, diffPixDis = this.diffPixDis, similarPixDis = this.similarPixDis,
+     nums = this.nums, sameWay = 0, whiteToneMin = 230) {
+    console.log('1111')
+    if (sameWay === 0) {
+      // await image.greyscale()//去除图像中的颜色
+      // await image.sepia() //涂写黑色
+      // await this._sleep(100);
+      // await image.contrast( -0.3 ); //调整对比度 ,识别不高,可以调高对比度
+      await image.convolute([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]); //图像卷积计算   Laplace因子
+      await this._sleep(100);
+    }
 
-    //311是背景图片的大小   10是随意写的偏移值,(主要是缺块一般都是在右边)
-    //todo 可以抽象为静态变量
-    image.convolute([[-1, -1,-1], [-1, 8, -1], [-1, -1, -1]]); //图像卷积计算   Laplace因子
-    image.scan(startX, startY, this.resize.full_width - startX - 5, this.resize.icon_height, function (x, y, idx) {
-      let fullBitMap = this.bitmap.data;
-
-      if(fullBitMap[idx]===255&&fullBitMap[idx+1]===255&&fullBitMap[idx+2]===255){
-        tempWhite.push([x,y])
-      }
-      //对比当前点和上一个点的像素距离
-      if (index > 2) {
-        const res1 = Math.abs(fullBitMap[idx] - frontR);
-        const res2 = Math.abs(fullBitMap[idx + 1] - frontG);
-        const res3 = Math.abs(fullBitMap[idx + 2] - frontB);
-        // console.log(x ,y, res1, res2, res3);
-        let dis = Math.sqrt(res1 ^ 2 + res2 ^ 2 + res3 ^ 3);
-        // console.log(dis)
-        if (!same) {
-          //100是因为缺块一般都在右边,也可以直接去掉这个判断
-          if (dis > diffPixDis && x > 100) {
-            same = true;
-            sameX = x;
-            // console.log(dis, x, y)
+    sameWay++;
+    if (way === 1) {
+      let tempWhite = [];//可能的边界点集合
+      let tempObj = {};
+      let targetX = 0;
+      await image.scan(startX, startY, this.resize.full_width - startX - 5, this.resize.icon_height, function (x, y, idx) {
+        let fullBitMap = this.bitmap.data;
+        if (fullBitMap[idx] >= whiteToneMin && fullBitMap[idx + 1] >= whiteToneMin && fullBitMap[idx + 2] >= whiteToneMin) {
+          tempWhite.push([x, y])
+        }
+      });
+      // console.log(tempWhite)
+      //简单筛选可能的x坐标
+      if (_.size(tempWhite) > 0) {
+        _.forEach(tempWhite, function (point) {
+          if (tempObj[point[0]]) {
+            tempObj[point[0]]++;
           } else {
-            same = false;
-            sameNum = 0;
-            sameX = 0;
+            tempObj[point[0]] = 1;
           }
+          if ((tempObj[targetX] || 0) < tempObj[point[0]]) {
+            console.log('-----', targetX)
+            targetX = point[0];
+          }
+        })
+        // console.log(tempObj)
+        console.log('target X', targetX);
+        return targetX;
+      } else {
+        console.log('sameWay', sameWay)
+        if (sameWay > 3) {
+          way = 2;
+          sameWay = 0;
+          return await this._calMoveX(image, startX, startY, way, diffPixDis, similarPixDis, nums, sameWay);
         } else {
-          //相似值判断
-          if (dis <= similarPixDis) {
-            // console.log(x, dis)
-            sameNum++;
-            if (sameNum > nums) {
-              info.push(sameX);
-              pointInfo[sameX] = pointInfo[sameX] || 1;
-              pointInfo[sameX]++;
+          await image.convolute([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]); //图像卷积计算   Laplace因子
+          return await this._calMoveX(image, startX, startY, way, diffPixDis, similarPixDis, nums, sameWay);
+        }
+      }
+    } else {//way =2
+      let frontR = 0, frontG = 0, frontB = 0;//前一个点的rgb数值
+      let index = 0;//统计点数
+      let sameNum = 0;//相似次数
+      let sameX = 0;//最终点
+      let same = false;
+      let info = [];//可能的坐标点集合
+
+      await image.scan(startX, startY, this.resize.full_width - startX - 5, this.resize.icon_height, function (x, y, idx) {
+        let fullBitMap = this.bitmap.data;
+        //对比当前点和上一个点的像素距离
+        if (index > 2) {
+          const res1 = Math.abs(fullBitMap[idx] - frontR);
+          const res2 = Math.abs(fullBitMap[idx + 1] - frontG);
+          const res3 = Math.abs(fullBitMap[idx + 2] - frontB);
+          let dis = Math.sqrt(res1 ^ 2 + res2 ^ 2 + res3 ^ 3);
+          if (!same) {
+            if (dis > diffPixDis && x > 100) {//相当于判断哪里的色值变化大,把它当成边界值 ,100是因为缺块一般都在右边,也可以直接去掉这个判断
+              same = true;
+              sameX = x;
+            } else {
+              same = false;
+              sameNum = 0;
+              sameX = 0;
             }
           } else {
-            same = false;
-            sameNum = 0;
-            sameX = 0;
+            //相似值判断
+            if (dis <= similarPixDis) {
+              sameNum++;
+              if (sameNum > nums) {
+                info.push(sameX);
+              }
+            } else {
+              same = false;
+              sameNum = 0;
+              sameX = 0;
+            }
           }
         }
-      }
-      frontR = fullBitMap[idx];
-      frontG = fullBitMap[idx + 1];
-      frontB = fullBitMap[idx + 2];
-      index++;
-    });
+        frontR = fullBitMap[idx];
+        frontG = fullBitMap[idx + 1];
+        frontB = fullBitMap[idx + 2];
+        index++;
+      });
 
-    // console.log(info)
-
-    if (_.size(info) > 0) {
-      info = _.sortBy(_.uniq(info));
-      //验证info中的坐标
-      let length = info.length;
-      console.log('before', info)
-      for (let i = length - 1; i >= 0; i--) {
-        if ((i - 1) >= 0) {
-          if (info[i] - info[i - 1] < 20) {//取最优
-            info[i] = null;
+      if (_.size(info) > 0) {
+        info = _.sortBy(_.uniq(info));
+        //验证info中的坐标
+        let length = info.length;
+        console.log('before', info)
+        for (let i = length - 1; i >= 0; i--) {
+          if ((i - 1) >= 0) {
+            if (info[i] - info[i - 1] < 20) {//取最优
+              info[i] = null;
+            }
           }
         }
+        console.log('after', info)
+        info = _.compact(info);
+        return info[info.length - 1];
+      } else {
+        similarPixDis += 0.1;
+        diffPixDis = diffPixDis - 0.1;
+        //调整参数,再次执行
+        return await this._calMoveX(image, startX, startY, way, diffPixDis, similarPixDis, nums, sameWay);
       }
-      console.log('after', info)
-      console.log('new ', tempWhite)
-      info = _.compact(info);
-      return info[info.length - 1];
-    } else {
-      similarPixDis += 0.1;
-      return this._calMoveX(image, startX, startY, diffPixDis, similarPixDis, nums);
     }
   }
 
@@ -173,7 +211,7 @@ class utils {
     }
 
     await this.page.mouse.up();
-    await this._sleep(_.random(2500, 3500));
+    await this._sleep(_.random(2500, 3000));
 
     //这里全部返回false,可以一直测试跑
     return { isSuccess: false };
@@ -187,11 +225,14 @@ class utils {
    * @param {*} startY  图片检测结束坐标
    */
   async _drag(image, startX, startY) {
-    let distance = this._calMoveX(image, startX, startY);
+    //首先计算需要移动的距离,核心
+    let distance = await this._calMoveX(image, startX, startY);
 
     //distance代表的是缺口的横坐标点
     distance = distance - this.iconToBackgroundDisX;
+    //尝试移动
     const result = await this._tryValidation(distance);
+
     console.log(result)
     if (result.isSuccess) {
       await this._sleep(1000);
@@ -219,9 +260,11 @@ class utils {
     console.log(iconUrl)
 
     let fullImg = await jimp.read(url);
-    let icon = await jimp.read(iconUrl);
+    console.log('read')
+    // let icon = await jimp.read(iconUrl);
+    await this._sleep(100);
     fullImg = await fullImg.resize(this.resize.full_width, this.resize.full_height);
-    icon = await icon.resize(this.resize.icon_width, this.resize.icon_height);
+    // icon = await icon.resize(this.resize.icon_width, this.resize.icon_height);
     // await fullImg.writeAsync('full.png')
     // await icon.writeAsync('icon.png')
 
