@@ -19,7 +19,7 @@ class utils {
       this.similarPixDis = 2; //计算相似的像素空间距离
     this.diffPixDis = 8;// 计算落差的像素空间距离
     this.nums = 10;// 相似的点的个数
-    this.iconToBackgroundDisX = 34;//icon初始相对于北京的距离
+    this.iconToBackgroundDisX = 34;//icon初始相对于背景的距离
   }
 
 
@@ -37,8 +37,7 @@ class utils {
    * @returns {*}
    */
   async _calMoveX(image, startX, startY, way = 1, diffPixDis = this.diffPixDis, similarPixDis = this.similarPixDis,
-     nums = this.nums, sameWay = 0, whiteToneMin = 230) {
-    console.log('1111')
+    nums = this.nums, sameWay = 0, whiteToneMin = 230) {
     if (sameWay === 0) {
       // await image.greyscale()//去除图像中的颜色
       // await image.sepia() //涂写黑色
@@ -47,35 +46,106 @@ class utils {
       await image.convolute([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]); //图像卷积计算   Laplace因子
       await this._sleep(100);
     }
+    await image.writeAsync('test.png')
 
     sameWay++;
     if (way === 1) {
       let tempWhite = [];//可能的边界点集合
-      let tempObj = {};
+      let tempObjX = {};
+      let tempObjY = {};
       let targetX = 0;
+      let targetY = 0;
+
+      let groupX = {}, groupY = {};
       await image.scan(startX, startY, this.resize.full_width - startX - 5, this.resize.icon_height, function (x, y, idx) {
         let fullBitMap = this.bitmap.data;
         if (fullBitMap[idx] >= whiteToneMin && fullBitMap[idx + 1] >= whiteToneMin && fullBitMap[idx + 2] >= whiteToneMin) {
-          tempWhite.push([x, y])
+          let point = { x: x, y: y }
+          tempWhite.push(point);
+          groupX[x] = groupX[x] || [];
+          groupX[x].push(point);
+          groupY[y] = groupY[y] || [];
+          groupY[y].push(point);
+
+          if (tempObjX[x]) {
+            tempObjX[x]++;
+          } else {
+            tempObjX[x] = 1;
+          }
+          tempObjY[y] = tempObjY[y] || 0;
+          tempObjY[y]++;
+          if ((tempObjX[targetX] || 0) < tempObjX[x]) {
+            targetX = x;
+          }
+          if ((tempObjY[targetY] || 0) < tempObjY[y]) {
+            targetY = y;
+          }
+
         }
       });
-      // console.log(tempWhite)
+      console.log('length:', _.size(tempWhite))
       //简单筛选可能的x坐标
       if (_.size(tempWhite) > 0) {
-        _.forEach(tempWhite, function (point) {
-          if (tempObj[point[0]]) {
-            tempObj[point[0]]++;
-          } else {
-            tempObj[point[0]] = 1;
+        // let groupX = _.groupBy(tempWhite, 'x');
+        // let groupY = _.groupBy(tempWhite, 'y');
+        let rerun = false;
+        if (_.size(tempWhite) < 30) {
+          rerun = false;
+        }
+
+        //
+
+        let sortX = [];
+        let nums = _.sortBy(_.values(tempObjX));
+        _.forEach(nums, function (num) {
+          if (num > 5) {
+            _.forEach(tempObjX, function (val, x) {
+              if (num === val) {
+                sortX.push(x);
+              }
+            });
           }
-          if ((tempObj[targetX] || 0) < tempObj[point[0]]) {
-            console.log('-----', targetX)
-            targetX = point[0];
+        });
+
+        let flag = true;
+        while (flag) {
+          for (let i = 0; i < sortX.length; i++) {
+            targetX = sortX[i];
+            let go = true;
+            _.forEachRight(groupX, function (arr, x) {
+              let dis = Math.abs(x - targetX);
+              if (go && dis > 38 & dis < 42 && arr.length > 5) {
+                // console.log('********', targetX, x, arr)
+                targetX = Math.min(targetX, x);
+                go = false;
+              }
+            });
+
+            if (!go) {
+              flag = false;
+              break;
+            }
+            if (i === sortX.length - 1) {
+              flag = false;
+            }
           }
-        })
-        // console.log(tempObj)
-        console.log('target X', targetX);
-        return targetX;
+        }
+
+
+
+
+        //把y出现最多的拿出来找坐标点,统计x的数量与检测,
+
+
+
+        console.log('target X', targetX, targetY);
+
+        if (rerun) {
+          whiteToneMin = whiteToneMin - 5;
+          return await this._calMoveX(image, startX, startY, way, diffPixDis, similarPixDis, nums, sameWay, whiteToneMin);
+        } else {
+          return targetX;
+        }
       } else {
         console.log('sameWay', sameWay)
         if (sameWay > 3) {
@@ -83,8 +153,9 @@ class utils {
           sameWay = 0;
           return await this._calMoveX(image, startX, startY, way, diffPixDis, similarPixDis, nums, sameWay);
         } else {
-          await image.convolute([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]); //图像卷积计算   Laplace因子
-          return await this._calMoveX(image, startX, startY, way, diffPixDis, similarPixDis, nums, sameWay);
+          // await image.convolute([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]); //图像卷积计算   Laplace因子
+          whiteToneMin = whiteToneMin - 5;
+          return await this._calMoveX(image, startX, startY, way, diffPixDis, similarPixDis, nums, sameWay, whiteToneMin);
         }
       }
     } else {//way =2
