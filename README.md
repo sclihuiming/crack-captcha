@@ -11,3 +11,8 @@ $ npm install
 $ npm start
 ```
 ⚠️ **注意:** npm install时需要注意Chromium下载是否成功,如果失败,需要重试,和网络环境有关
+
+## 示例
+![](captcha-finish.gif)
+
+⚠️ **注意:** 图片中延时比较大,是因为模拟请求中使用了间隔

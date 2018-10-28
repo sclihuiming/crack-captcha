@@ -95,41 +95,41 @@ class utils {
 
         //
 
-        let sortX = [];
-        let nums = _.sortBy(_.values(tempObjX));
-        _.forEach(nums, function (num) {
-          if (num > 5) {
-            _.forEach(tempObjX, function (val, x) {
-              if (num === val) {
-                sortX.push(x);
-              }
-            });
-          }
-        });
+        // let sortX = [];
+        // let nums = _.sortBy(_.values(tempObjX));
+        // _.forEach(nums, function (num) {
+        //   if (num > 5) {
+        //     _.forEach(tempObjX, function (val, x) {
+        //       if (num === val) {
+        //         sortX.push(x);
+        //       }
+        //     });
+        //   }
+        // });
 
-        let flag = true;
-        while (flag) {
-          for (let i = 0; i < sortX.length; i++) {
-            targetX = sortX[i];
-            let go = true;
-            _.forEachRight(groupX, function (arr, x) {
-              let dis = Math.abs(x - targetX);
-              if (go && dis > 38 & dis < 42 && arr.length > 5) {
-                // console.log('********', targetX, x, arr)
-                targetX = Math.min(targetX, x);
-                go = false;
-              }
-            });
+        // let flag = true;
+        // while (flag) {
+        //   for (let i = 0; i < sortX.length; i++) {
+        //     targetX = sortX[i];
+        //     let go = true;
+        //     _.forEachRight(groupX, function (arr, x) {
+        //       let dis = Math.abs(x - targetX);
+        //       if (go && dis > 38 & dis < 42 && arr.length > 5) {
+        //         // console.log('********', targetX, x, arr)
+        //         targetX = Math.min(targetX, x);
+        //         go = false;
+        //       }
+        //     });
 
-            if (!go) {
-              flag = false;
-              break;
-            }
-            if (i === sortX.length - 1) {
-              flag = false;
-            }
-          }
-        }
+        //     if (!go) {
+        //       flag = false;
+        //       break;
+        //     }
+        //     if (i === sortX.length - 1) {
+        //       flag = false;
+        //     }
+        //   }
+        // }
 
 
 
